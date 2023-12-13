@@ -533,6 +533,74 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes.GetNode(nodeID)
 }
 
+// virtual node -> a queue
+func (pc *PartitionContext) translateQueueResourcesFromVirtualNode(node *objects.Node) error {
+	if node == nil {
+		return fmt.Errorf("cannot add 'nil' node to partition %s", pc.Name)
+	}
+
+	log.Log(log.SchedPartition).Info("report virtual node to the head",
+		zap.String("partition", pc.Name),
+		zap.String("nodeID", node.NodeID))
+
+	pc.Lock()
+	defer pc.Unlock()
+
+	virtualNodeID := node.NodeID
+	clusterID, queue, err := common.ParseVirtualNodeID(virtualNodeID)
+	log.Log(log.SchedPartition).Info("## ParseVirtualNodeID",
+		zap.String("virtualNodeID", virtualNodeID),
+		zap.String("clusterID", clusterID),
+		zap.String("queue", queue))
+	if err != nil {
+		panic(err)
+	}
+
+	// parse queue resources
+	// node capacity is the part queue max
+	maxCapacity := node.GetCapacity()
+	if queueInternal := pc.getQueueInternal(queue); queueInternal == nil {
+		// new queue
+		log.Log(log.SchedPartition).Info("## creating queue",
+			zap.String("queueName", queue),
+			zap.String("origination", clusterID))
+		managedQueue, err := pc.createQueue(queue, security.UserGroup{})
+		if err != nil {
+			panic(err)
+		}
+
+		log.Log(log.SchedPartition).Info("## setting queue max",
+			zap.String("queueName", queue),
+			zap.String("max", maxCapacity.String()))
+		managedQueue.UnsafeSetMaxResource(maxCapacity)
+	} else {
+		// update the existing queue
+		currentMax := queueInternal.GetMaxResource()
+		log.Log(log.SchedPartition).Info("## queue already exists, updating",
+			zap.String("queueName", queue),
+			zap.String("currentMax", currentMax.String()))
+
+		queueInternal.UnsafeSetMaxResource(resources.Add(currentMax, maxCapacity))
+		log.Log(log.SchedPartition).Info("## Updated queue max",
+			zap.String("queueName", queue),
+			zap.String("currentMax", queueInternal.GetMaxResource().String()))
+	}
+
+	// **** this is probably not needed
+	// ********
+	//log.Log(log.SchedPartition).Info("## setting queue used",
+	//	zap.String("queueName", queue),
+	//	zap.String("used", maxCapacity.String()))
+	//for _, existingAllocation := range node.GetAllAllocations() {
+	//	err := pc.GetQueue(queue).IncAllocatedResource(existingAllocation.GetAllocatedResource(), true)
+	//	if err != nil {
+	//		panic(err)
+	//	}
+	//}
+
+	return nil
+}
+
 // Add the node to the partition and process the allocations that are reported by the node.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*objects.Allocation) error {

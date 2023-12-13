@@ -36,6 +36,7 @@ import (
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
+	Role       string `yaml:",omitempty" json:",omitempty"`
 	Checksum   string `yaml:",omitempty" json:",omitempty"`
 }
 
@@ -200,6 +201,7 @@ func GetConfigurationString(requestBytes []byte) string {
 
 // DefaultSchedulerConfig contains the default scheduler configuration; used if no other is provided
 var DefaultSchedulerConfig = `
+Role: head
 partitions:
   - name: default
     placementrules:

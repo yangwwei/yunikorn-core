@@ -609,7 +609,16 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 	}
 
 	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
-	err := partition.AddNode(sn, existingAllocations)
+
+	// if this is the head node, some extra logic to handle queues
+	//if configs.ConfigContext.Get(cc.policyGroup).Role == "head" {
+	err := partition.translateQueueResourcesFromVirtualNode(sn)
+	if err != nil {
+		panic(err)
+	}
+	//}
+
+	err = partition.AddNode(sn, existingAllocations)
 	sn.SendNodeAddedEvent()
 	if err != nil {
 		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)

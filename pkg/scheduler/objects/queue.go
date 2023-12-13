@@ -1276,6 +1276,19 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	return resources.ComponentWiseMin(parentLimit, sq.maxResource)
 }
 
+// UnsafeSetMaxResource FIXME
+func (sq *Queue) UnsafeSetMaxResource(max *resources.Resource) {
+	sq.Lock()
+	defer sq.Unlock()
+
+	log.Log(log.SchedQueue).Info("## updating queue max resources",
+		zap.String("name", sq.Name),
+		zap.Stringer("current max", sq.maxResource),
+		zap.Stringer("new max", max))
+	sq.maxResource = max.Clone()
+	sq.updateMaxResourceMetrics()
+}
+
 // SetMaxResource sets the max resource for the root queue. Called as part of adding or removing a node.
 // Should only happen on the root, all other queues get it from the config via properties.
 func (sq *Queue) SetMaxResource(max *resources.Resource) {
