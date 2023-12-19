@@ -425,6 +425,42 @@ func (pc *PartitionContext) removeAppInternal(appID string) *objects.Application
 	return app
 }
 
+// getOrAddApplication returns the existing app or create a new one and add that to the partition
+// it only creates the app when the core is running as the Head role
+// this is a lock-free call, do not call this outside of the partition context
+func (pc *PartitionContext) getOrAddApplication(alloc *objects.Allocation) (*objects.Application, error) {
+	if configs.ConfigContext.GetRole(pc.partitionManager.cc.policyGroup) == common.RoleHead {
+		ugi, err := pc.convertUGI(&si.UserGroupInformation{
+			User:   "nobody",
+			Groups: []string{"nobody"},
+		}, false)
+		if err != nil {
+			panic(err)
+		}
+
+		allocQueue, exist := alloc.GetTagsClone()["queue"]
+		if !exist {
+			panic(fmt.Errorf("allocation must have tag about queue"))
+		}
+		app := objects.NewApplication(&si.AddApplicationRequest{
+			ApplicationID: alloc.GetApplicationID(),
+			QueueName:     allocQueue,
+			PartitionName: alloc.GetPartitionName(),
+			Ugi:           &si.UserGroupInformation{User: "nobody", Groups: []string{"nobody"}},
+		}, ugi, pc.partitionManager.cc.rmEventHandler, pc.RmID)
+
+		log.Log(log.SchedPartition).Info("self-adding app to the context (head)")
+		err = pc.AddApplication(app)
+		if err != nil {
+			panic(err)
+		}
+
+		return app, nil
+	}
+
+	return nil, fmt.Errorf("failed to find application %s", alloc.GetApplicationID())
+}
+
 func (pc *PartitionContext) getApplication(appID string) *objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()
@@ -1235,11 +1271,12 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		return fmt.Errorf("failed to find node %s", alloc.GetNodeID())
 	}
 
-	app := pc.getApplication(alloc.GetApplicationID())
-	if app == nil {
+	app, err := pc.getOrAddApplication(alloc)
+	if err != nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failed to find application %s", alloc.GetApplicationID())
+		return err
 	}
+
 	queue := app.GetQueue()
 
 	// Do not check if the new allocation goes beyond the queue's max resource (recursive).

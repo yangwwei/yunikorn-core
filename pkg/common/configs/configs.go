@@ -19,6 +19,7 @@
 package configs
 
 import (
+	"github.com/apache/yunikorn-core/pkg/common"
 	"sync"
 	"time"
 
@@ -80,6 +81,17 @@ func (ctx *SchedulerConfigContext) Get(policyGroup string) *SchedulerConfig {
 	ctx.lock.RLock()
 	defer ctx.lock.RUnlock()
 	return ctx.configs[policyGroup]
+}
+
+func (ctx *SchedulerConfigContext) GetRole(policyGroup string) string {
+	ctx.lock.RLock()
+	defer ctx.lock.RUnlock()
+
+	if c, ok := ctx.configs[policyGroup]; ok {
+		return c.Role
+	}
+
+	return common.RoleStandalone
 }
 
 // AddConfigMapCallback registers a callback to detect configuration updates

@@ -15,8 +15,12 @@ import (
 func TestHead(t *testing.T) {
 
 	configData := `
+role: head
 partitions:
   - name: default
+    placementrules:
+    - name: provided
+      create: false
     queues:
       - name: root
         submitacl: "*"
@@ -43,10 +47,14 @@ partitions:
 	if err != nil {
 		t.Error(err)
 	}
+
+	fmt.Println(virtualNodeID1)
 	virtualNodeID2, err := common.GetVirtualNodeID("compute-cluster-2", "root.sandbox")
 	if err != nil {
 		t.Error(err)
 	}
+	fmt.Println(virtualNodeID2)
+
 	err = context.RMProxy.UpdateNode(&si.NodeRequest{Nodes: []*si.NodeInfo{
 		{
 			// virtual node ID
@@ -57,8 +65,7 @@ partitions:
 			// Max queue resource
 			SchedulableResource: &si.Resource{
 				Resources: map[string]*si.Quantity{
-					"memory": {Value: 100000000},
-					"vcore":  {Value: 20000},
+					"vcore": {Value: 200},
 				},
 			},
 			ExistingAllocations: []*si.Allocation{
@@ -70,12 +77,12 @@ partitions:
 					AllocationID:  "job-1-allocation-1",
 					NodeID:        virtualNodeID1,
 					AllocationTags: map[string]string{
+						"queue":               "root.sandbox", // TODO: clarify requirement, this is required!
 						siCommon.CreationTime: strconv.FormatInt(time.Now().UnixMilli(), 10),
 					},
 					ResourcePerAlloc: &si.Resource{
 						Resources: map[string]*si.Quantity{
-							"memory": {Value: 50000000},
-							"vcore":  {Value: 10000},
+							"vcore": {Value: 100},
 						},
 					},
 				},
@@ -88,8 +95,43 @@ partitions:
 			},
 			SchedulableResource: &si.Resource{
 				Resources: map[string]*si.Quantity{
-					"memory": {Value: 200000000},
-					"vcore":  {Value: 40000},
+					"vcore": {Value: 100},
+				},
+			},
+			ExistingAllocations: []*si.Allocation{
+				{
+					// allocation key is the applicationID
+					// tracks the "current" allocated resources for the app
+					ApplicationID: "job-2",
+					AllocationKey: "job-2",
+					AllocationID:  "job-2-allocation-1",
+					NodeID:        virtualNodeID2,
+					AllocationTags: map[string]string{
+						"queue":               "root.sandbox", // TODO: clarify requirement, this is required!
+						siCommon.CreationTime: strconv.FormatInt(time.Now().UnixMilli(), 10),
+					},
+					ResourcePerAlloc: &si.Resource{
+						Resources: map[string]*si.Quantity{
+							"vcore": {Value: 10},
+						},
+					},
+				},
+				{
+					// allocation key is the applicationID
+					// tracks the "current" allocated resources for the app
+					ApplicationID: "job-3",
+					AllocationKey: "job-3",
+					AllocationID:  "job-3-allocation-1",
+					NodeID:        virtualNodeID2,
+					AllocationTags: map[string]string{
+						"queue":               "root.sandbox", // TODO: clarify requirement, this is required!
+						siCommon.CreationTime: strconv.FormatInt(time.Now().UnixMilli(), 10),
+					},
+					ResourcePerAlloc: &si.Resource{
+						Resources: map[string]*si.Quantity{
+							"vcore": {Value: 20},
+						},
+					},
 				},
 			},
 			Action: si.NodeInfo_CREATE,
@@ -101,7 +143,7 @@ partitions:
 		t.Error(err)
 	}
 
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	part := context.Scheduler.GetClusterContext().GetPartition("[test]default")
 	for _, node := range part.GetNodes() {
 		fmt.Println(node)
@@ -110,4 +152,6 @@ partitions:
 	internalQueue := part.GetQueue("root.sandbox")
 	fmt.Println(internalQueue.Name)
 	fmt.Println(internalQueue.GetMaxResource().String())
+	fmt.Println(internalQueue.GetAllocatedResource().String())
+
 }

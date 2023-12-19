@@ -28,4 +28,7 @@ const (
 	AnonymousGroup    = "nogroup"
 	RecoveryQueue     = "@recovery@"
 	RecoveryQueueFull = "root." + RecoveryQueue
+	RoleHead          = "head"
+	RoleMember        = "member"
+	RoleStandalone    = "standalone"
 )
