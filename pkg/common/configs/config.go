@@ -35,8 +35,8 @@ import (
 // The configuration can contain multiple partitions. Each partition contains the queue definition for a logical
 // set of scheduler resources.
 type SchedulerConfig struct {
-	Partitions []PartitionConfig
 	Role       string `yaml:",omitempty" json:",omitempty"`
+	Partitions []PartitionConfig
 	Checksum   string `yaml:",omitempty" json:",omitempty"`
 }
 
@@ -201,13 +201,12 @@ func GetConfigurationString(requestBytes []byte) string {
 
 // DefaultSchedulerConfig contains the default scheduler configuration; used if no other is provided
 var DefaultSchedulerConfig = `
-Role: head
+role: head
 partitions:
   - name: default
     placementrules:
-      - name: tag
-        value: namespace
-        create: true
+      - name: provided
+        create: false 
     queues:
       - name: root
         submitacl: '*'
