@@ -177,7 +177,7 @@ pseudo:
 
 # Build the example binaries for dev and test
 .PHONY: commands
-commands: build/simplescheduler build/schedulerclient build/queueconfigchecker
+commands: build/simplescheduler build/schedulerclient build/queueconfigchecker build/head
 
 build/simplescheduler: go.mod go.sum $(shell find cmd pkg)
 	@echo "building example scheduler"
@@ -193,6 +193,11 @@ build/queueconfigchecker: go.mod go.sum $(shell find cmd pkg)
 	@echo "building queueconfigchecker"
 	@mkdir -p build
 	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/queueconfigchecker ./cmd/queueconfigchecker
+
+build/head: go.mod go.sum $(shell find cmd pkg)
+	@echo "building yunikorn head"
+	@mkdir -p build
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/head ./cmd/head
 
 # Build binaries for dev and test
 .PHONY: build

@@ -1,4 +1,4 @@
-package kubeacon
+package member
 
 import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"

@@ -68,4 +68,5 @@ replace (
 	golang.org/x/sys => golang.org/x/sys v0.13.0
 	golang.org/x/text => golang.org/x/text v0.13.0
 	golang.org/x/tools => golang.org/x/tools v0.13.0
+	github.com/apache/yunikorn-scheduler-interface => /Users/weiweiyang/workspace/github/forks/yunikorn/yunikorn-scheduler-interface
 )

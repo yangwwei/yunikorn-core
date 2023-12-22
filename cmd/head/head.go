@@ -2,13 +2,14 @@ package main
 
 import (
 	"flag"
-	"os"
+	"github.com/apache/yunikorn-core/pkg/head"
 )
 
 var endpoint = flag.String("endpoint", "tcp://localhost:3333", "head endpoint")
 
 func main() {
 	flag.Parse()
-	Run(*endpoint)
-	os.Exit(0)
+	service := head.NewFleetHttpService(*endpoint)
+	service.Start()
+	service.Wait()
 }

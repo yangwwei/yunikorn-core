@@ -1,10 +1,9 @@
-package main
+package head
 
 import (
 	"context"
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
-	"github.com/apache/yunikorn-core/pkg/kubeacon"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 	"go.uber.org/zap"
@@ -36,8 +35,7 @@ func (h *Head) RegisterResourceManager(ctx context.Context, in *si.RegisterResou
 	log.Log(log.Head).Info("received Member registration request",
 		zap.String("request", in.String()))
 
-	mgr := &kubeacon.MemberManager{}
-	response, err := h.schedulerContext.RMProxy.RegisterResourceManager(in, mgr)
+	response, err := h.schedulerContext.RMProxy.RegisterResourceManager(in, &NoOptCallback{})
 	if err != nil {
 		panic(err)
 	}

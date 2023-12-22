@@ -1,60 +1,64 @@
-package tests
+package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/entrypoint"
+	"github.com/apache/yunikorn-core/pkg/log"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"io"
 	"strconv"
-	"testing"
 	"time"
 )
 
-func TestHead(t *testing.T) {
-
-	configData := `
-role: head
-partitions:
-  - name: default
-    placementrules:
-    - name: provided
-      create: false
-    queues:
-      - name: root
-        submitacl: "*"
-`
-
-	// Not implemented
-	memberMgr := &member.MemberManager{}
-
-	context := entrypoint.StartAllServices()
-	response, err := context.RMProxy.RegisterResourceManager(
-		&si.RegisterResourceManagerRequest{
-			RmID:        "test",
-			PolicyGroup: "",
-			Version:     "0.0.1",
-			Config:      configData,
-		}, memberMgr)
-	if err != nil {
-		t.Error(err)
+func main() {
+	if err := runApp2(); err != nil {
+		log.Log(log.Member).Fatal("unable to start member",
+			zap.Error(err))
 	}
-	fmt.Println("registered")
-	fmt.Println(response)
+}
 
-	virtualNodeID1, err := common.GetVirtualNodeID("compute-cluster-1", "root.sandbox")
+func runApp2() error {
+	// Set up a connection to the server.
+	conn, err := grpc.Dial("localhost:3333",
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		t.Error(err)
+		log.Log(log.Member).Fatal("unable to connect to the head",
+			zap.Error(err))
 	}
+	defer func(conn *grpc.ClientConn) {
+		err := conn.Close()
+		if err != nil {
+			log.Log(log.Member).Fatal("failed to close the connection")
+		}
+	}(conn)
 
-	fmt.Println(virtualNodeID1)
-	virtualNodeID2, err := common.GetVirtualNodeID("compute-cluster-2", "root.sandbox")
+	c := si.NewSchedulerClient(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour*100000)
+	defer cancel()
+	_, err = c.RegisterResourceManager(ctx, &si.RegisterResourceManagerRequest{
+		RmID:        "test",
+		PolicyGroup: "",
+		Version:     "0.0.1",
+	})
 	if err != nil {
-		t.Error(err)
+		return fmt.Errorf("unable to register: %v", err)
 	}
-	fmt.Println(virtualNodeID2)
+	log.Log(log.Member).Info("Member registered")
 
-	err = context.RMProxy.UpdateNode(&si.NodeRequest{Nodes: []*si.NodeInfo{
+	stream, err := c.UpdateNode(ctx)
+	if err != nil {
+		return fmt.Errorf("error on update: %v", err)
+	}
+	done := make(chan bool)
+
+	virtualNodeID1, _ := common.GetVirtualNodeID("compute-cluster-1", "root.sandbox")
+	virtualNodeID2, _ := common.GetVirtualNodeID("compute-cluster-2", "root.sandbox")
+	nodeRequest := &si.NodeRequest{Nodes: []*si.NodeInfo{
 		{
 			// virtual node ID
 			NodeID: virtualNodeID1,
@@ -137,20 +141,46 @@ partitions:
 		},
 	},
 		RmID: "test",
-	})
-	if err != nil {
-		t.Error(err)
 	}
 
-	time.Sleep(2 * time.Second)
-	part := context.Scheduler.GetClusterContext().GetPartition("[test]default")
-	for _, node := range part.GetNodes() {
-		fmt.Println(node)
+	// Connect to server and send streaming
+	// first goroutine sends requests
+	if err := stream.Send(nodeRequest); err != nil {
+		log.Log(log.Member).Fatal("failed to send the node request", zap.Error(err))
 	}
 
-	internalQueue := part.GetQueue("root.sandbox")
-	fmt.Println(internalQueue.Name)
-	fmt.Println(internalQueue.GetMaxResource().String())
-	fmt.Println(internalQueue.GetAllocatedResource().String())
+	log.Log(log.Member).Info("node request sent")
 
+	// second goroutine receives data from stream
+	// and saves result in max variable
+	//
+	// if stream is finished it closes done channel
+	go func() {
+		for {
+			response, err := stream.Recv()
+			if err == io.EOF {
+				close(done)
+				return
+			}
+			if err != nil {
+				log.Log(log.Member).Fatal("failed to get response", zap.Error(err))
+			}
+			log.Log(log.Member).Info("Responded by server",
+				zap.String("response", response.String()))
+		}
+	}()
+
+	// third goroutine closes done channel
+	// if context is done
+	go func() {
+		<-ctx.Done()
+		if err := ctx.Err(); err != nil {
+			log.Log(log.Member).Fatal("error closing", zap.Error(err))
+		}
+		close(done)
+	}()
+
+	<-done
+	log.Log(log.Member).Info("client has shutdown")
+	return nil
 }
